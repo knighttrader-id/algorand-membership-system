@@ -1,0 +1,215 @@
+#pragma version 11
+#pragma typetrack false
+
+// algopy.arc4.ARC4Contract.approval_program() -> uint64:
+main:
+    intcblock 1 32 0
+    bytecblock "exp_r" 0x151f7c75
+    // smart_contracts/membership_system/contract.py:14
+    // class MembershipContract(ARC4Contract):
+    pushbytes 0x9ab1db65 // method "join_membership(pay,address)bool"
+    txna ApplicationArgs 0
+    match main_join_membership_route@4
+
+main_switch_case_next@5:
+    // smart_contracts/membership_system/contract.py:14
+    // class MembershipContract(ARC4Contract):
+    txn OnCompletion
+    !
+    assert // OnCompletion must be NoOp
+    pushbytes 0x0484c231 // method "create_app()void"
+    txna ApplicationArgs 0
+    match main_create_app_route@6
+    txn ApplicationID
+    assert
+    pushbytess 0x04676bb3 0xec4b29d9 // method "is_member(address)bool", method "get_expiration_round(address)uint64"
+    txna ApplicationArgs 0
+    match is_member get_expiration_round
+    err
+
+main_create_app_route@6:
+    // smart_contracts/membership_system/contract.py:32
+    // @arc4.abimethod(create="allow")
+    intc_0 // 1
+    return
+
+main_join_membership_route@4:
+    // smart_contracts/membership_system/contract.py:41
+    // @arc4.abimethod(allow_actions=["OptIn", "NoOp"])
+    intc_0 // 1
+    txn OnCompletion
+    shl
+    pushint 3 // 3
+    &
+    txn ApplicationID
+    &&
+    assert // OnCompletion must be one of OptIn, NoOp && can only call when not creating
+    b join_membership
+
+
+// smart_contracts.membership_system.contract.MembershipContract.join_membership[routing]() -> void:
+join_membership:
+    // smart_contracts/membership_system/contract.py:41
+    // @arc4.abimethod(allow_actions=["OptIn", "NoOp"])
+    txn GroupIndex
+    intc_0 // 1
+    -
+    dup
+    gtxns TypeEnum
+    intc_0 // pay
+    ==
+    assert // transaction type is pay
+    txna ApplicationArgs 1
+    dup
+    len
+    intc_1 // 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // smart_contracts/membership_system/contract.py:58-60
+    // # 1. Assert Payment Details
+    // # Payment must be sent by the application caller (Txn.sender)
+    // assert payment.sender == Txn.sender, "Payment sender must match app caller"
+    dig 1
+    gtxns Sender
+    txn Sender
+    ==
+    assert // Payment sender must match app caller
+    // smart_contracts/membership_system/contract.py:62-63
+    // # Payment must be sent to this application's address
+    // assert payment.receiver == Global.current_application_address, "Payment receiver must be the application"
+    dig 1
+    gtxns Receiver
+    global CurrentApplicationAddress
+    ==
+    assert // Payment receiver must be the application
+    // smart_contracts/membership_system/contract.py:65-66
+    // # Payment amount must match the required fee
+    // assert payment.amount == UInt64(1_000_000), "Payment amount must be 1000000 microAlgos"
+    swap
+    gtxns Amount
+    pushint 1000000 // 1000000
+    ==
+    assert // Payment amount must be 1000000 microAlgos
+    // smart_contracts/membership_system/contract.py:68-69
+    // # The 'member' account must be the transaction sender
+    // assert member == Txn.sender, "Member account must be the transaction sender"
+    dup
+    txn Sender
+    ==
+    assert // Member account must be the transaction sender
+    // smart_contracts/membership_system/contract.py:71-73
+    // # 2. Calculate new expiration round
+    // # Membership is valid from the *current* round plus the duration.
+    // new_expiration_round = Global.round + UInt64(1000)
+    global Round
+    pushint 1000 // 1000
+    +
+    // smart_contracts/membership_system/contract.py:75-78
+    // # 3. Update the sender's local state
+    // # The ARC4 ABI method setup ensures the 'member' account is available for
+    // # LocalState access. This line will attempt to write the new expiration round.
+    // self.expiration_round[member] = new_expiration_round
+    bytec_0 // "exp_r"
+    swap
+    app_local_put
+    // smart_contracts/membership_system/contract.py:41
+    // @arc4.abimethod(allow_actions=["OptIn", "NoOp"])
+    pushbytes 0x151f7c7580
+    log
+    intc_0 // 1
+    return
+
+
+// smart_contracts.membership_system.contract.MembershipContract.is_member[routing]() -> void:
+is_member:
+    // smart_contracts/membership_system/contract.py:84
+    // @arc4.abimethod(readonly=True)
+    txna ApplicationArgs 1
+    dup
+    len
+    intc_1 // 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // smart_contracts/membership_system/contract.py:95-97
+    // # Try to get the expiration round from local state for the member account.
+    // # maybe_get returns the value and a boolean indicating if the key exists.
+    // current_expiration_round, exists = self.expiration_round.maybe(member)
+    intc_2 // 0
+    bytec_0 // "exp_r"
+    app_local_get_ex
+    // smart_contracts/membership_system/contract.py:99-102
+    // # The user is NOT a member if:
+    // # a) The local state key doesn't exist (i.e., they haven't opted in or paid).
+    // # b) The stored expiration round is less than the current round.
+    // if not exists or current_expiration_round < Global.round:
+    bz is_member_if_body@3
+    dup
+    global Round
+    <
+    bz is_member_after_if_else@4
+
+is_member_if_body@3:
+    // smart_contracts/membership_system/contract.py:103
+    // return arc4.Bool(False)
+    pushbytes 0x00
+
+is_member_after_inlined_smart_contracts.membership_system.contract.MembershipContract.is_member@5:
+    // smart_contracts/membership_system/contract.py:84
+    // @arc4.abimethod(readonly=True)
+    bytec_1 // 0x151f7c75
+    swap
+    concat
+    log
+    intc_0 // 1
+    return
+
+is_member_after_if_else@4:
+    // smart_contracts/membership_system/contract.py:105
+    // return arc4.Bool(True)
+    pushbytes 0x80
+    // smart_contracts/membership_system/contract.py:84
+    // @arc4.abimethod(readonly=True)
+    b is_member_after_inlined_smart_contracts.membership_system.contract.MembershipContract.is_member@5
+
+
+// smart_contracts.membership_system.contract.MembershipContract.get_expiration_round[routing]() -> void:
+get_expiration_round:
+    // smart_contracts/membership_system/contract.py:107
+    // @arc4.abimethod(readonly=True)
+    txna ApplicationArgs 1
+    dup
+    len
+    intc_1 // 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // smart_contracts/membership_system/contract.py:114
+    // expiration_round, exists = self.expiration_round.maybe(member)
+    intc_2 // 0
+    bytec_0 // "exp_r"
+    app_local_get_ex
+    // smart_contracts/membership_system/contract.py:116
+    // if not exists:
+    bnz get_expiration_round_after_if_else@3
+    // smart_contracts/membership_system/contract.py:117-118
+    // # Return 0 if the account hasn't opted-in or the key hasn't been set
+    // return arc4.UInt64(0)
+    pushbytes 0x0000000000000000
+
+get_expiration_round_after_inlined_smart_contracts.membership_system.contract.MembershipContract.get_expiration_round@4:
+    // smart_contracts/membership_system/contract.py:107
+    // @arc4.abimethod(readonly=True)
+    bytec_1 // 0x151f7c75
+    swap
+    concat
+    log
+    intc_0 // 1
+    return
+
+get_expiration_round_after_if_else@3:
+    // smart_contracts/membership_system/contract.py:120
+    // return arc4.UInt64(expiration_round)
+    dup
+    itob
+    // smart_contracts/membership_system/contract.py:107
+    // @arc4.abimethod(readonly=True)
+    b get_expiration_round_after_inlined_smart_contracts.membership_system.contract.MembershipContract.get_expiration_round@4
